@@ -1,0 +1,5 @@
+bucket         = "maya-tfstate"
+key            = "terraform-state/scraper.tfstate"
+region         = "us-east-2"
+encrypt        = true
+dynamodb_table = "terraform-lockid"
