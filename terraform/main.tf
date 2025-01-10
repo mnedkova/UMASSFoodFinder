@@ -73,6 +73,12 @@ resource "aws_iam_role_policy_attachment" "attach_iam_S3_policy_to_iam_role" {
   policy_arn = aws_iam_policy.iam_policy_for_S3.arn
 }
 
+resource "null_resource" "deployment_files" {
+  provisioner "local-exec" {
+    
+  }
+}
+
 data "archive_file" "zip_scraper" {
 type        = "zip"
 source_dir  = "${path.module}/../lambdas/scraper"
