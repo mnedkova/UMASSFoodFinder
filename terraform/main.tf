@@ -1,66 +1,58 @@
-resource "aws_iam_role" "lambda_role" {
-name   = "Lambda_Function_Role"
-assume_role_policy = <<EOF
-{
- "Version": "2012-10-17",
- "Statement": [
-   {
-     "Action": "sts:AssumeRole",
-     "Principal": {
-       "Service": "lambda.amazonaws.com"
-     },
-     "Effect": "Allow",
-     "Sid": ""
-   }
- ]
+data "aws_iam_policy_document" "lambda_role_policy_doc" {
+  statement {
+    actions = [
+      "sts:AssumeRole"
+    ]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    effect = "Allow"
+  }
 }
-EOF
+
+resource "aws_iam_role" "lambda_role" {
+  name   = "Lambda_Function_Role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_role_policy_doc.json
+}
+
+data "aws_iam_policy_document" "iam_policy_for_lambda_doc" {
+  statement {
+    actions = [
+       "logs:CreateLogGroup",
+       "logs:CreateLogStream",
+       "logs:PutLogEvents",
+    ]
+    effect = "Allow"
+    resources = ["arn:aws:logs:*:*:*"]
+
+  }
 }
 
 resource "aws_iam_policy" "iam_policy_for_lambda" {
  name         = "aws_iam_policy_for_terraform_aws_lambda_role"
  path         = "/"
  description  = "AWS IAM Policy for managing aws lambda role"
- policy = <<EOF
-{
- "Version": "2012-10-17",
- "Statement": [
-   {
-     "Action": [
-       "logs:CreateLogGroup",
-       "logs:CreateLogStream",
-       "logs:PutLogEvents"
-     ],
-     "Resource": "arn:aws:logs:*:*:*",
-     "Effect": "Allow"
-   }
- ]
+ policy = data.aws_iam_policy_document.iam_policy_for_lambda_doc.json
 }
-EOF
+
+data "aws_iam_policy_document" "iam_policy_for_S3_doc" {
+  statement {
+    actions = [ 
+      "s3:GetObject",
+      "s3:ListBucket",
+      "s3:PutObject",
+    ]
+    effect = "Allow"
+    resources = [ "arn:aws:s3:::umassdininginfo/*" ]
+  }
 }
+
 
 resource "aws_iam_policy" "iam_policy_for_S3" {
   name = "aws_iam_policy_for_lambda_to_access_S3"
   path = "/"
-
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:PutObject"
-      ],
-      "Effect": "Allow",
-      "Resource": [
-        "arn:aws:s3:::EXAMPLE-BUCKET/*"
-      ]
-    }
-  ]
-}
-EOF
+  policy = data.aws_iam_policy_document.iam_policy_for_S3_doc.json
 }
 
 data "aws_iam_policy_document" "secrets_manager_policy_doc" {
@@ -112,10 +104,62 @@ data "archive_file" "zip_scraper" {
 }
 
 resource "aws_lambda_function" "scraper_lambda" {
-  filename                       = "${path.module}/scraper.zip"
-  function_name                  = "scraper_lambda_function"
-  role                           = aws_iam_role.lambda_role.arn
-  handler                        = "index.lambda_handler"
-  runtime                        = "python3.13"
-  depends_on                     = [aws_iam_role_policy_attachment.attach_iam_policy_to_iam_role]
+  depends_on    = [aws_iam_role_policy_attachment.attach_iam_policy_to_iam_role]
+  filename      = "${path.module}/scraper.zip"
+  function_name = "scraper_lambda_function"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "index.lambda_handler"
+  runtime       = "python3.13"
+  timeout       = 300
+
+}
+
+resource "aws_iam_role" "scraper_scheduler_role" {
+  name = "ScraperSchedulerRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "scheduler.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "scraper_invoke_policy" {
+  name = "ScraperInvokeLambdaPolicy"
+  role = aws_iam_role.scraper_scheduler_role.id
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "AllowEventBridgeToInvokeLambda",
+        "Action" : [
+          "lambda:InvokeFunction"
+        ],
+        "Effect" : "Allow",
+        "Resource" : aws_lambda_function.scraper_lambda.arn
+      }
+    ]
+  })
+}
+
+resource "aws_scheduler_schedule" "scraper_lambda_schedule" {
+  name = "ScraperLambdaSchedule"
+  flexible_time_window {
+    mode = "OFF"
+  }
+  schedule_expression = "cron(5 0 * * ? *)"
+  schedule_expression_timezone = "America/New_York"
+  target {
+    arn = aws_lambda_function.scraper_lambda.arn
+    role_arn = aws_iam_role.scraper_scheduler_role.arn
+    input = jsonencode({
+      "input": "This message was sent using EventBridge Scheduler!"
+    })
+  }
 }
