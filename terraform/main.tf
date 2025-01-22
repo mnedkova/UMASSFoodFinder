@@ -95,6 +95,9 @@ resource "terraform_data" "build_lambda_scraper" {
     working_dir = path.module
     interpreter = ["/bin/bash", "-c"]
   }
+  triggers_replace = {
+    dir_sha1    = sha1(join("", [for f in fileset(path.module, "../lambdas/scraper/**") : filesha1(f)]))
+  }
 }
 
 data "archive_file" "zip_scraper" {
