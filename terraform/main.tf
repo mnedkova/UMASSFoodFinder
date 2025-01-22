@@ -93,6 +93,7 @@ resource "terraform_data" "build_lambda_scraper" {
   provisioner "local-exec" {
     command = "../scripts/create_pkg.sh"
     working_dir = path.module
+    interpreter = ["/bin/bash", "-c"]
   }
 }
 

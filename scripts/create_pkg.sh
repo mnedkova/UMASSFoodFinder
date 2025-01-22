@@ -15,7 +15,7 @@ source env_$function_name/bin/activate
 
 
 # Installing python dependencies...
-FILE=lambdas/scraper/requirements.txt
+FILE=../lambdas/scraper/requirements.txt
 
 if [ -f "$FILE" ]; then
   echo "Installing dependencies..."
@@ -34,7 +34,7 @@ echo "Creating deployment package..."
 
 cp -r  env_$function_name/lib/python3.13/site-packages/* $dir_name
 
-cp lambdas/scraper/index.py $dir_name
+cp ../lambdas/scraper/index.py $dir_name
 
 # Removing virtual environment folder...
 echo "Removing virtual environment folder..."

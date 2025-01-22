@@ -43,13 +43,17 @@ def extractDoc(date, hall_id, hall_name, json_doc):
     for meal in json_doc:
         for category in json_doc[meal]:
             parser.feed(json_doc[meal][category])
-            for entree in parser.entrees:
-                entree['meal'] = meal
-                entree['category'] = category
+            for e in parser.entrees:
+                e['meal'] = meal
+                e['category'] = category
+                e['date'] = date.isoformat()
+                e['hall'] = hall_name
+                e['hall_id'] = hall_id
+                e['id'] = f'{date}-{hall_name}-{e["name"]}'
+                e['keywords'] = f'{e["name"]} {e["data-ingredient-list"]} {e["data-clean-diet-str"]}'
             entrees.extend(parser.entrees)
             parser.entrees = []
-        doc['entrees'] = entrees
-    return doc
+    return entrees
             
 def lambda_handler(event, context):
     #Bucket Access
@@ -98,13 +102,17 @@ def lambda_handler(event, context):
                 bucket.put_object(Key=object_name, Body=text_object)
                 
                 #Scrapes specific key items
-                doc = extractDoc(current_day, location_id, location_name, json_response)
-                doc_string = json.dumps(doc).encode("utf-8")
-                doc_location=f'data/{current_day}/{location_name}.json'
-                bucket.put_object(Key=doc_location, Body=doc_string)
+                docs = extractDoc(current_day, location_id, location_name, json_response)
+                # doc_string = json.dumps(doc).encode("utf-8")
+                # doc_location=f'data/{current_day}/{location_name}.json'
+                # bucket.put_object(Key=doc_location, Body=doc_string)
                 
-                resp = client.index(index="foodfinder", id=doc["id"], body=doc)
-                print(resp["result"])
+                for doc in docs:
+                    doc_string = json.dumps(doc).encode("utf-8")
+                    doc_location=f'data/{current_day}/{doc["id"]}.json'
+                    bucket.put_object(Key=doc_location, Body=doc_string)
+                    resp = client.index(index="foodfinder", id=doc["id"], body=doc)
+                    print(resp["result"])
 
                 
             except ValueError:
